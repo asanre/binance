@@ -41,6 +41,7 @@ import {
   GetPositionMarginChangeHistoryParams,
   IncomeHistory,
   IndexPriceKlinesParams,
+  MarkPrice,
   ModeChangeResult,
   MultiAssetModeResponse,
   MultiAssetsMode,
@@ -141,8 +142,12 @@ export class COINMClient extends BaseRestClient {
     return this.get('dapi/v1/markPriceKlines', params);
   }
 
-  getMarkPrice(params?: Partial<BasicSymbolParam>): Promise<any> {
+  async getMarkPrice(params?: Partial<BasicSymbolParam>): Promise<MarkPrice[]> {
     return this.get('dapi/v1/premiumIndex', params);
+  }
+
+  async getMarkPriceBySymbol(symbol: string): Promise<MarkPrice | undefined> {
+    return (await this.getMarkPrice({ symbol })).pop();
   }
 
   getFundingRateHistory(params?: Partial<BasicSymbolPaginatedParams>): Promise<FundingRateHistory[]> {
@@ -297,7 +302,7 @@ export class COINMClient extends BaseRestClient {
   }
 
   async getPositionsWithAmt(): Promise<FuturesPosition[]> {
-    const positions: FuturesPosition[] = await this. getPositions();
+    const positions: FuturesPosition[] = await this.getPositions();
     return positions.filter(value => +value.positionAmt !== 0);
   }
 

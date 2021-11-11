@@ -1,7 +1,6 @@
 import { COINMClient } from "../../src/coinm-client";
-import { FuturesPosition } from "../../src";
 
-describe('Private Futures USDM REST API Endpoints', () => {
+describe('Private Futures COINM REST API Endpoints', () => {
   const API_KEY = process.env.API_KEY_COM;
   const API_SECRET = process.env.API_SECRET_COM;
 
@@ -88,6 +87,11 @@ describe('Private Futures USDM REST API Endpoints', () => {
 
     it('getBalance()', async () => {
       let actual = await api.getBalance();
+      expect(actual).toMatchObject(expect.any(Array));
+    });
+
+    it('getMarkPrice()', async () => {
+      let actual = await api.getMarkPrice();
       expect(actual).toMatchObject(expect.any(Array));
     });
 
@@ -202,5 +206,4 @@ describe('Private Futures USDM REST API Endpoints', () => {
       });
     });
   });
-
 });
