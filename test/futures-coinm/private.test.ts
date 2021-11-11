@@ -1,16 +1,19 @@
-import { USDMClient } from "../../src/usdm-client";
+import { COINMClient } from "../../src/coinm-client";
+import { FuturesPosition } from "../../src";
 
 describe('Private Futures USDM REST API Endpoints', () => {
   const API_KEY = process.env.API_KEY_COM;
   const API_SECRET = process.env.API_SECRET_COM;
 
-  const api = new USDMClient({
-    disableTimeSync: true,
-    api_key: API_KEY,
-    api_secret: API_SECRET,
-  });
+  const api = new COINMClient({
+      disableTimeSync: true,
+      api_key: API_KEY,
+      api_secret: API_SECRET,
+    },
+    undefined,
+    true);
 
-  const symbol = 'BTCUSDT';
+  const symbol = 'BTCUSD_PERP';
 
   beforeEach(() => {
     // console.log(`IP request weight: `, api.getRateLimitStates());
@@ -26,15 +29,101 @@ describe('Private Futures USDM REST API Endpoints', () => {
     });
 
     it('getAllOpenOrders()', async () => {
-      expect(await api.getAllOpenOrders()).toMatchObject(expect.any(Array));
+      let actual = await api.getAllOpenOrders({ symbol: symbol });
+      expect(actual).toMatchObject(expect.any(Array));
     });
 
+    it('openBuyOrder()', async () => {
+      let actual = await api.submitNewOrder({
+        symbol: "BTCUSD_PERP",
+        type: "MARKET",
+        side: "BUY",
+        quantity: 340
+      });
+      expect(actual).toMatchObject(expect.any(Array));
+    });
+
+    it('marketBuy()', async () => {
+      let actual = await api.submitNewOrder({
+        symbol: "BTCUSD_PERP",
+        type: "MARKET",
+        side: "BUY",
+        quantity: 340
+      });
+      expect(actual).toMatchObject(expect.any(Array));
+    });
+
+    it('marketSell()', async () => {
+      let actual = await api.submitNewOrder({
+        symbol: "BTCUSD_PERP",
+        type: "MARKET",
+        side: "SELL",
+        quantity: 0.5
+      });
+      expect(actual).toMatchObject(expect.any(Object));
+    });
+
+    it('closeBuyPosition()', async () => {
+      let actual = await api.submitNewOrder({
+        symbol: "BTCUSD_PERP",
+        type: "MARKET",
+        side: "SELL",
+        quantity: 340,
+        reduceOnly: "true"
+      });
+      expect(actual).toMatchObject(expect.any(Array));
+    });
+
+    it('closeSellPosition()', async () => {
+      let actual = await api.submitNewOrder({
+        symbol: "BTCUSD_PERP",
+        type: "MARKET",
+        side: "BUY",
+        quantity: 350,
+        reduceOnly: "true"
+      });
+      expect(actual).toMatchObject(expect.any(Array));
+    });
+
+
     it('getBalance()', async () => {
-      expect(await api.getBalance()).toMatchObject(expect.any(Array));
+      let actual = await api.getBalance();
+      expect(actual).toMatchObject(expect.any(Array));
+    });
+
+    it('getBalanceByAsset()', async () => {
+      let actual = await api.getBalanceByAsset("BTC");
+      expect(actual).not.toBeNull();
+    });
+
+    it('getPositions()', async () => {
+      let actual = await api.getPositions();
+      expect(actual).toMatchObject(expect.any(Array));
+    });
+
+    it('getPositionsWithAmt()', async () => {
+      let actual = await api.getPositionsWithAmt();
+      expect(actual).toMatchObject(expect.any(Array));
+    });
+
+    it('cancelAllOpenOrders()', async () => {
+      let acual = await api.cancelAllOpenOrders({ symbol });
+      expect(acual).resolves.toMatchObject({
+        "code": 200,
+      });
+    });
+
+    it('cancelOrder()', async () => {
+      expect(api.cancelOrder({ symbol, orderId: 123456 })).rejects.toMatchObject({
+        code: -2011,
+        message: 'Unknown order sent.',
+        body: { code: -2011, msg: 'Unknown order sent.' },
+      });
     });
 
     it('getAccountInformation()', async () => {
-      expect(await api.getAccountInformation()).toMatchObject({
+      let accountInformation = await api.getAccountInformation();
+      expect(accountInformation).toMatchObject({
         'assets': expect.any(Array),
         'availableBalance': expect.any(String),
         'canDeposit': expect.any(Boolean),
@@ -54,10 +143,6 @@ describe('Private Futures USDM REST API Endpoints', () => {
         'totalWalletBalance': expect.any(String),
         'updateTime': expect.any(Number),
       });
-    });
-
-    it('getPositions()', async () => {
-      expect(await api.getPositions()).toMatchObject(expect.any(Array));
     });
 
     it('getIncomeHistory()', async () => {
@@ -88,20 +173,6 @@ describe('Private Futures USDM REST API Endpoints', () => {
         'makerCommissionRate': expect.any(String),
         'symbol': expect.any(String),
         'takerCommissionRate': expect.any(String),
-      });
-    });
-
-    it('cancelOrder()', async () => {
-      expect(api.cancelOrder({ symbol, orderId: 123456 })).rejects.toMatchObject({
-        code: -2011,
-        message: 'Unknown order sent.',
-        body: { code: -2011, msg: 'Unknown order sent.' },
-      });
-    });
-
-    it('cancelAllOpenOrders()', async () => {
-      expect(api.cancelAllOpenOrders({ symbol })).resolves.toMatchObject({
-        "code": 200,
       });
     });
   });

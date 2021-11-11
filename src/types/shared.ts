@@ -7,7 +7,7 @@ export type ExchangeSymbol = string;
 export type BooleanString = 'true' | 'false';
 export type BooleanStringCapitalised = 'TRUE' | 'FALSE';
 
-export type BinanceBaseUrlKey = 'spot' | 'spot1' | 'spot2' | 'spot3' | 'spot4' | 'usdmtest' | 'usdm' | 'coinm' | 'voptions' | 'voptionstest';
+export type BinanceBaseUrlKey = 'spot' | 'spot1' | 'spot2' | 'spot3' | 'spot4' | 'usdmtest' | 'usdm' | 'coinm'| 'coinmtest' | 'voptions' | 'voptionstest';
 
 export type OrderTimeInForce = 'GTC' | 'IOC' | 'FOK';
 

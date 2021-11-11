@@ -99,7 +99,7 @@ const BINANCE_BASE_URLS: Record<BinanceBaseUrlKey, string> = {
 
   // COINM Futures
   coinm: 'https://dapi.binance.com',
-  // testnet is same as `usdmtest`
+  coinmtest: 'https://testnet.binancefuture.com',
 
   // Vanilla Options
   voptions: 'https://vapi.binance.com',
@@ -121,6 +121,7 @@ export function getServerTimeEndpoint(urlKey: BinanceBaseUrlKey): string {
       return 'fapi/v1/time';
 
     case 'coinm':
+    case 'coinmtest':
       return 'dapi/v1/time';
 
     case 'voptions':
@@ -141,7 +142,7 @@ export function getRestBaseUrl(clientType: BinanceBaseUrlKey, restInverseOptions
   return BINANCE_BASE_URLS[clientType];
 }
 
-export function isPublicEndpoint (endpoint: string): boolean {
+export function isPublicEndpoint(endpoint: string): boolean {
   if (endpoint.startsWith('v2/public')) {
     return true;
   }
