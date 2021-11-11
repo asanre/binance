@@ -35,7 +35,7 @@ describe('Private Futures USDM REST API Endpoints', () => {
 
     it('openBuyOrder()', async () => {
       let actual = await api.submitNewOrder({
-        symbol: "BTCUSD_PERP",
+        symbol: symbol,
         type: "MARKET",
         side: "BUY",
         quantity: 340
@@ -45,7 +45,7 @@ describe('Private Futures USDM REST API Endpoints', () => {
 
     it('marketBuy()', async () => {
       let actual = await api.submitNewOrder({
-        symbol: "BTCUSD_PERP",
+        symbol: symbol,
         type: "MARKET",
         side: "BUY",
         quantity: 340
@@ -55,7 +55,7 @@ describe('Private Futures USDM REST API Endpoints', () => {
 
     it('marketSell()', async () => {
       let actual = await api.submitNewOrder({
-        symbol: "BTCUSD_PERP",
+        symbol: symbol,
         type: "MARKET",
         side: "SELL",
         quantity: 0.5
@@ -65,7 +65,7 @@ describe('Private Futures USDM REST API Endpoints', () => {
 
     it('closeBuyPosition()', async () => {
       let actual = await api.submitNewOrder({
-        symbol: "BTCUSD_PERP",
+        symbol: symbol,
         type: "MARKET",
         side: "SELL",
         quantity: 340,
@@ -76,7 +76,7 @@ describe('Private Futures USDM REST API Endpoints', () => {
 
     it('closeSellPosition()', async () => {
       let actual = await api.submitNewOrder({
-        symbol: "BTCUSD_PERP",
+        symbol: "symbol",
         type: "MARKET",
         side: "BUY",
         quantity: 350,
@@ -103,6 +103,11 @@ describe('Private Futures USDM REST API Endpoints', () => {
 
     it('getPositionsWithAmt()', async () => {
       let actual = await api.getPositionsWithAmt();
+      expect(actual).toMatchObject(expect.any(Array));
+    });
+
+    it('getPositionsBySymbol()', async () => {
+      let actual = await api.getPositionsBySymbol(symbol);
       expect(actual).toMatchObject(expect.any(Array));
     });
 

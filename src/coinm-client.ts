@@ -301,6 +301,11 @@ export class COINMClient extends BaseRestClient {
     return positions.filter(value => +value.positionAmt !== 0);
   }
 
+  async getPositionsBySymbol(symbol: string): Promise<FuturesPosition[]> {
+    const positions: FuturesPosition[] = await this.getPositions();
+    return positions.filter(value => value.symbol === symbol)
+  }
+
   getAccountTrades(params: SymbolFromPaginatedRequestFromId): Promise<FuturesPositionTrade[]> {
     return this.getPrivate('dapi/v1/userTrades', params);
   }
