@@ -10,6 +10,7 @@ import { USDMClient } from './usdm-client';
 
 import Beautifier from './util/beautifier';
 import { appendEventIfMissing, appendEventMarket, getContextFromWsKey, getWsKeyWithContext, RestClientOptions } from './util/requestUtils';
+import { terminateWs } from './util/ws-utils';
 
 import WsStore from './util/WsStore';
 
@@ -45,6 +46,8 @@ export interface WSClientConfigurableOptions {
   api_key?: string;
   api_secret?: string;
   beautify?: boolean;
+  // Disable ping/pong ws heartbeat mechanism (not recommended)
+  disableHeartbeat?: boolean;
   pongTimeout?: number;
   pingInterval?: number;
   reconnectTimeout?: number;
@@ -100,6 +103,37 @@ interface ListenKeyPersistenceState {
 
 function throwUnhandledSwitch(x: never, msg: string): never {
   throw new Error(msg);
+}
+
+function parseEventTypeFromMessage(parsedMsg?): string | undefined {
+  if (parsedMsg?.e) {
+    return parsedMsg.e;
+  }
+  if (Array.isArray(parsedMsg) && parsedMsg.length) {
+    return parsedMsg[0]?.e;
+  }
+
+  return;
+}
+
+/**
+ * Try to resolve event.data. Example circumstance: {"stream":"!forceOrder@arr","data":{"e":"forceOrder","E":1634653599186,"o":{"s":"IOTXUSDT","S":"SELL","o":"LIMIT","f":"IOC","q":"3661","p":"0.06606","ap":"0.06669","X":"FILLED","l":"962","z":"3661","T":1634653599180}}}
+ */
+export function parseRawWsMessage(event: any) {
+  if (typeof event === 'string') {
+    const parsedEvent = JSON.parse(event);
+
+    if (parsedEvent.data) {
+      if (typeof parsedEvent.data === 'string') {
+        return parseRawWsMessage(parsedEvent.data);
+      }
+      return parsedEvent.data;
+    }
+  }
+  if (event?.data) {
+    return JSON.parse(event.data);
+  }
+  return event;
 }
 
 export class WebsocketClient extends EventEmitter {
@@ -237,10 +271,12 @@ export class WebsocketClient extends EventEmitter {
       this.requestSubscribeTopics(wsKey, topics);
     }
 
-    this.wsStore.get(wsKey, true)!.activePingTimer = setInterval(
-      () => this.sendPing(wsKey),
-      this.options.pingInterval
-    );
+    if (!this.options.disableHeartbeat) {
+      this.wsStore.get(wsKey, true)!.activePingTimer = setInterval(
+        () => this.sendPing(wsKey),
+        this.options.pingInterval
+      );
+    }
   }
 
   private onWsError(error: any, wsKey: WsKey, ws: WebSocket) {
@@ -270,15 +306,17 @@ export class WebsocketClient extends EventEmitter {
     }
   }
 
-  private onWsMessage(event: any, wsKey: WsKey, source: WsEventInternalSrc) {
+  private onWsMessage(event: MessageEvent, wsKey: WsKey, source: WsEventInternalSrc) {
     try {
-      const msg = JSON.parse(event && event.data || event);
+      this.clearPongTimer(wsKey);
+
+      const msg = parseRawWsMessage(event);
 
       // Edge case where raw event does not include event type, detect using wsKey and mutate msg.e
       appendEventIfMissing(msg, wsKey);
       appendEventMarket(msg, wsKey);
 
-      const eventType = msg.e || (Array.isArray(msg) && msg[0]?.e);
+      const eventType = parseEventTypeFromMessage(msg);
       if (eventType) {
         this.emit('message', msg);
 
@@ -325,7 +363,7 @@ export class WebsocketClient extends EventEmitter {
         return;
       }
 
-      this.logger.warning('Unhandled ws message type', { ...loggerCategory, parsedMessage: msg, rawEvent: event, wsKey, source });
+      this.logger.warning('Bug? Unhandled ws message event type. Check if appendEventIfMissing needs to parse wsKey.', { ...loggerCategory, parsedMessage: JSON.stringify(msg), rawEvent: event, wsKey, source });
     } catch (e) {
       this.logger.error('Exception parsing ws message: ', { ...loggerCategory, rawEvent: event, wsKey, error: e, source });
       this.emit('error', { wsKey, error: e, rawEvent: event, source });
@@ -360,7 +398,7 @@ export class WebsocketClient extends EventEmitter {
     this.clearTimers(wsKey);
 
     this.getWs(wsKey)?.close();
-    this.getWs(wsKey)?.terminate();
+    terminateWs(this.getWs(wsKey));
   }
 
   public closeWs(ws: WebSocket, willReconnect?: boolean) {
@@ -383,7 +421,7 @@ export class WebsocketClient extends EventEmitter {
         break;
 
       default:
-        this.logger.error(`{context} due to unexpected response error: ${error.msg}`, { ...loggerCategory, wsKey });
+        this.logger.error(`${context} due to unexpected response error: ${error.msg || error.message || error}`, { ...loggerCategory, wsKey, error });
         break;
     }
   }
@@ -747,26 +785,34 @@ export class WebsocketClient extends EventEmitter {
   private teardownUserDataListenKey(listenKey: string, market: WsMarket, ws: WebSocket) {
     const listenKeyState = this.getListenKeyState(listenKey, market);
     clearInterval(listenKeyState.keepAliveFailures);
-    ws.terminate();
+
+    terminateWs(ws);
 
     delete this.listenKeyStateStore[listenKey];
   }
 
-  private async respawnUserDataStream(market: WsMarket, symbol?: string, isTestnet?: boolean, respawnAttempt?: number) {
+  private async respawnUserDataStream(market: WsMarket, symbol?: string, isTestnet?: boolean, respawnAttempt?: number): Promise<void> {
     const forceNewConnection = true;
     const isReconnecting = true;
+    let ws: WebSocket | undefined;
+
     try {
       switch (market) {
         case 'spot':
-          return this.subscribeSpotUserDataStream(forceNewConnection, isReconnecting);
+          ws = await this.subscribeSpotUserDataStream(forceNewConnection, isReconnecting);
+          break;
         case 'margin':
-          return this.subscribeMarginUserDataStream(forceNewConnection, isReconnecting);
+          ws = await this.subscribeMarginUserDataStream(forceNewConnection, isReconnecting);
+          break;
         case 'isolatedMargin':
-          return this.subscribeIsolatedMarginUserDataStream(symbol!, forceNewConnection, isReconnecting);
+          ws = await this.subscribeIsolatedMarginUserDataStream(symbol!, forceNewConnection, isReconnecting);
+          break;
         case 'usdm':
-          return this.subscribeUsdFuturesUserDataStream(isTestnet, forceNewConnection, isReconnecting);
+          ws = await this.subscribeUsdFuturesUserDataStream(isTestnet, forceNewConnection, isReconnecting);
+          break;
         case 'usdmTestnet':
-          return this.subscribeUsdFuturesUserDataStream(true, forceNewConnection, isReconnecting);
+          ws = await this.subscribeUsdFuturesUserDataStream(true, forceNewConnection, isReconnecting);
+          break;
         case 'coinm':
         case 'coinmTestnet':
         case 'options':
@@ -776,8 +822,13 @@ export class WebsocketClient extends EventEmitter {
           throwUnhandledSwitch(market, `Failed to respawn user data stream - unhandled market: ${market}`)
       }
     } catch (e) {
-      this.logger.warning('User key respawn failed due to error, trying again with short delay', { ...loggerCategory, market, symbol, isTestnet, respawnAttempt, error: e });
-      setTimeout(() => this.respawnUserDataStream(market, symbol, isTestnet, respawnAttempt ? respawnAttempt + 1 : 1), 1000 * 15);
+      this.logger.error('Exception trying to spawn user data stream', { ...loggerCategory, market, symbol, isTestnet, error: e });
+    }
+
+    if (!ws) {
+      const delayInSeconds = 2;
+      this.logger.error('User key respawn failed, trying again with short delay', { ...loggerCategory, market, symbol, isTestnet, respawnAttempt, delayInSeconds });
+      setTimeout(() => this.respawnUserDataStream(market, symbol, isTestnet, respawnAttempt ? respawnAttempt + 1 : 1), 1000 * delayInSeconds);
     }
   }
 
@@ -1084,7 +1135,6 @@ export class WebsocketClient extends EventEmitter {
       return this.subscribeSpotUserDataStreamWithListenKey(listenKey, forceNewConnection, isReconnecting);
     } catch (e) {
       this.logger.error(`Failed to get spot user data listen key`, { ...loggerCategory, error: e });
-      throw e;
     }
   }
 
@@ -1107,7 +1157,6 @@ export class WebsocketClient extends EventEmitter {
       return ws;
     } catch (e) {
       this.logger.error(`Failed to get margin user data listen key`, { ...loggerCategory, error: e });
-      throw e;
     }
   }
 

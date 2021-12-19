@@ -4,6 +4,7 @@ import { BinanceBaseUrlKey, CancelOCOParams, CancelOrderParams, NewOCOParams, Or
 import { WsMarket } from "../types/websockets";
 import { USDMClient } from "../usdm-client";
 import { WsKey } from "../websocket-client";
+import { signMessage } from "./node-support";
 
 export type RestClient = MainClient | USDMClient;
 
@@ -73,17 +74,61 @@ export function generateNewOrderId(network: BinanceBaseUrlKey): string {
   return randomString;
 }
 
-export function serialiseParams(params: object = {}, strict_validation = false): string {
+export function serialiseParams(params: object = {}, strict_validation = false, encodeValues: boolean = false): string {
   return Object.keys(params)
     .map(key => {
       const value = params[key];
       if (strict_validation === true && typeof value === 'undefined') {
         throw new Error('Failed to sign API request due to undefined parameter');
       }
-      return `${key}=${value}`;
+      const encodedValue = encodeValues ? encodeURIComponent(value) : value;
+      return `${key}=${encodedValue}`;
     })
     .join('&');
 };
+
+export interface SignedRequestState {
+  // Request body as an object, as originally provided by caller
+  requestBody: any;
+  // Params serialised into a query string, including timestamp and revvwindow
+  serialisedParams: string | undefined;
+  timestamp?: number;
+  signature?: string;
+  recvWindow?: number;
+}
+
+export async function getRequestSignature(
+  data: any,
+  key?: string,
+  secret?: string,
+  recvWindow?: number,
+  timestamp?: number,
+  strictParamValidation?: boolean,
+): Promise<SignedRequestState> {
+  // Optional, set to 5000 by default. Increase if timestamp/recvWindow errors are seen.
+  const requestRecvWindow = data?.recvWindow ?? recvWindow ?? 5000;
+
+  if (key && secret) {
+    const requestParams = {
+      ...data,
+      timestamp,
+      recvWindow: requestRecvWindow
+    }
+    const serialisedParams = serialiseParams(requestParams, strictParamValidation, true);
+    const signature = await signMessage(serialisedParams, secret);
+    requestParams.signature = signature;
+
+    return {
+      requestBody: { ...data },
+      serialisedParams,
+      timestamp: timestamp,
+      signature: signature,
+      recvWindow: requestRecvWindow,
+    }
+  }
+
+  return { requestBody: data, serialisedParams: undefined };
+}
 
 const BINANCE_BASE_URLS: Record<BinanceBaseUrlKey, string> = {
   // spot/margin/savings/mining
@@ -179,15 +224,17 @@ export function appendEventIfMissing(wsMsg: any, wsKey: WsKey) {
     return;
   }
 
-  if (wsKey.indexOf('partialBookDepth') !== -1) {
-    wsMsg.e = 'partialBookDepth';
-    return;
-  }
-
   if (wsKey.indexOf('diffBookDepth') !== -1) {
     wsMsg.e = 'diffBookDepth';
     return;
   }
+
+  if (wsKey.indexOf('partialBookDepth') !== -1 || wsKey.indexOf('depth') !== -1) {
+    wsMsg.e = 'partialBookDepth';
+    return;
+  }
+
+  // console.warn('couldnt derive event type: ', wsKey);
 }
 
 interface WsContext {
