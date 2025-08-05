@@ -1,5 +1,14 @@
 import { AxiosRequestConfig } from 'axios';
 
+import {
+  AlgoOrderResult,
+  CancelAlgoOrderParams,
+  CancelAlgoOrderResult,
+  GetAlgoOrderParams,
+  GetAllAlgoOrdersParams,
+  NewAlgoOrderParams,
+  NewAlgoOrderResult,
+} from './types/algo';
 import { FundingRate } from './types/coin';
 import {
   AggregateFuturesTrade,
@@ -819,5 +828,34 @@ export class USDMClient extends BaseRestClient {
     if (!params[orderIdProperty].startsWith(expectedOrderIdPrefix)) {
       logInvalidOrderId(orderIdProperty, expectedOrderIdPrefix, params);
     }
+  }
+
+  // NEW: place an algo conditional order
+  submitNewAlgoOrder(params: NewAlgoOrderParams): Promise<NewAlgoOrderResult> {
+    return this.postPrivate('fapi/v1/algoOrder', params);
+  }
+
+  // NEW: cancel one algo order
+  cancelAlgoOrder(
+    params: CancelAlgoOrderParams,
+  ): Promise<CancelAlgoOrderResult> {
+    return this.deletePrivate('fapi/v1/algoOrder', params);
+  }
+
+  // NEW: query a single algo order
+  getAlgoOrder(params: GetAlgoOrderParams): Promise<AlgoOrderResult> {
+    return this.getPrivate('fapi/v1/algoOrder', params);
+  }
+
+  // NEW: list all open algo orders
+  getAllOpenAlgoOrders(params?: {
+    symbol?: string;
+  }): Promise<AlgoOrderResult[]> {
+    return this.getPrivate('fapi/v1/openAlgoOrders', params);
+  }
+
+  // NEW: historical algo orders (max 7 days)
+  getAllAlgoOrders(params: GetAllAlgoOrdersParams): Promise<AlgoOrderResult[]> {
+    return this.getPrivate('fapi/v1/allAlgoOrders', params);
   }
 }
